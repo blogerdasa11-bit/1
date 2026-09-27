@@ -1,0 +1,58 @@
+import telebot
+import requests
+import re
+
+TELEGRAM_TOKEN = "8886339967:AAEN6LCyO_3sy2kvI22bGZtAEIhl3EHy5e4"
+YANDEX_API_TOKEN = "y0__wgBENXK5ZIBGNWzQiDxzKCWGRtY3iYqkmxoGA3FcC0MKScBDELp"
+MY_CLID = 14884111
+
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
+def get_yandex_affiliate_url(incoming_url):
+    try:
+        api_url = "https://api.content.market.yandex.ru/v3/affiliate/partner/link/create"
+        params = {
+            "url": incoming_url,
+            "clid": MY_CLID,
+            "format": "json"
+        }
+        headers = {
+            "Authorization": f"OAuth {YANDEX_API_TOKEN}"
+        }
+        response = requests.get(api_url, params=params, headers=headers, timeout=10)
+
+        if response.status_code == 200:
+            response_data = response.json()
+            if response_data.get("status") == "OK":
+                link_obj = response_data.get("link", {})
+                return link_obj.get("shortUrl") or link_obj.get("url")
+            else:
+                return None
+        else:
+            return None
+    except Exception:
+        return None
+
+def process_forwarded_message(message):
+    text = message.text or message.caption or ""
+    match = re.search(r"(https://market\.yandex\.ru/[^\s]+)", text, re.IGNORECASE)
+    if match:
+        old_url = match.group(1)
+        new_url = get_yandex_affiliate_url(old_url)
+        if new_url:
+            return new_url
+    return None
+
+@bot.message_handler(content_types=['text', 'photo'])
+def handle_message(message):
+    if message.text and message.text.startswith('/start'):
+        bot.reply_to(message, "Привет! Перешли пост со ссылкой на Яндекс Маркет.")
+        return
+
+    result = process_forwarded_message(message)
+    if result:
+        bot.reply_to(message, result)
+    else:
+        bot.reply_to(message, "Не найдена ссылка на Яндекс Маркет в пересланном сообщении.")
+
+bot.polling(none_stop=True)
